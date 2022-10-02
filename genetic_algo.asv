@@ -1,0 +1,141 @@
+%% Implement Genetic Algorithm
+% Name: Long Nguyen
+% Date: Sep 27
+tic
+%% Set up simulation & genetic algorithm
+clear; clc; clf; close all
+figsaveFlag = true ;
+fname = 'C:\Users\nguye\Downloads\OPA-simulation (1)-20220919T015152Z-001\OPA-simulation (1)\Genetic Algorithm';
+N = 10; wl = 0.45; d_opt = wl/2; d = 2*d_opt; D = 10000*d;
+k = 2*pi/wl ; phi = 0;
+x = -200*ceil(N/2)*d: d :200*ceil(N/2)*d;  % framework for N_x
+
+lastgen = 1000;
+totalPopulation = 50;
+mutationRate = 0.05 ; 
+population = zeros(N, totalPopulation);
+fitness = zeros(1, totalPopulation);
+%% Generate population  
+i = 1;
+d = (10:2:40)*wl;
+while (i < totalPopulation + 1)
+    %aperiodic_set = Aperiodic_set(N);
+    %N_x = 2*d_opt*(aperiodic_set - mean(aperiodic_set));
+    random_d = randi([1 length(d)]);
+    N_x = linspace(-floor(N/2)*d(random_d), floor(N/2)*d(random_d), N);
+    N_x = interp1(x,x, N_x,'nearest');
+    population(:,i) = N_x;
+    i=i+1; 
+end
+i = 1;
+while (i < totalPopulation + 1)
+    j = randi(totalPopulation); k = randi(totalPopulation);
+    parentA = population(:,j); parentB = population(:,k);
+    child = crossover(parentA, parentB);
+    child = mutate(child, 0.5, wl);
+    population(:,i) = child; 
+    i = i +1;
+end
+
+%% Calculate Fitness 
+generation = 1;
+bestFOV = zeros(1,lastgen);
+
+ftextsave = fname + "\text";
+fsum = sprintf("Log_GA_%i.txt", randi([0 100]));
+fileID = fopen(fullfile(ftextsave,fsum),'wt');
+fprintf(fileID, "Genetic Algorithm... \n \n");
+fprintf(fileID, "Saving distribution with best FOV \n");
+fprintf(fileID, "Operating wavelength %0.2f um \n", 2*d_opt);
+
+while (generation < lastgen)
+    i = 1;
+    while (i< totalPopulation+1)
+        D = 1000*N*d_opt ; 
+        N_x = population(:,i);
+        [I_ff_norm, Angle_ff] = OPA_farfield(N, N_x, D, k, d, phi);
+        [pks, locs] = findpeaks(I_ff_norm, Angle_ff, "MinPeakHeight", 0.5);
+        if isempty(locs)
+           FOV = 0; 
+        else
+            locs_diff = diff(locs);
+            %figure
+            %plot(Angle_ff, I_ff_norm);
+            if length(locs_diff) > 5
+                FOV = mean(locs_diff(1:3), 'all');
+            else
+                FOV = mean(locs_diff, 'all');
+            end
+        end
+        if isnan(FOV); FOV = 0; end 
+        fitness(1,i) = FOV;
+        i = i+1;
+        if FOV > 60
+            fmt=['Nx (um) =' repmat(' %.2f',1,numel(N_x))];
+            titleplot = sprintf(fmt,N_x);
+            f2 = figure('visible', (figsaveFlag));
+            plot(Angle_ff, I_ff_norm);
+            xlabel("Angle (deg)");
+            ylabel("I");
+            title(titleplot);
+            fplotsave = fname + "\plots\FOV";
+            fig_name1 = sprintf("Genetic_Algoithm_N_%i_gen_%i",N,lastgen);
+            saveas(f2, fullfile(fplotsave,fig_name1), 'png');
+        end
+
+    end
+    %% Create mating pool, crossover, mutation --> new population
+    % Choose mating pool based on probability (FOV value) from previous
+    % population
+        % higher FOV distribution will appear more in the mating pool
+    % randomly choose in mating pool (probability of previous population
+    % is embedded)
+    % Then crossover between parents --> child
+    % then DNA of child will mutate (with rate 0.1)
+    % to get new population
+    if all(~fitness)
+        fitness = ones(1, length(fitness));
+    end
+    fitness_prob = fitness/sum(fitness,'all');
+    i = 1:1:totalPopulation;
+    y = randsample(i, 100, true, fitness_prob); % choose 100 samples 
+    % from previous population based on its fitness
+    matingPool = population(:, y);
+    i = 1 ;
+
+    % choose new population from mating pool
+    while (i < totalPopulation+1)
+        j = randi(100); k = randi(100);
+        parentA = matingPool(:,j); parentB = matingPool(:,k);
+        child = crossover(parentA, parentB);
+        child = mutate(child, mutationRate, wl);
+        population(:,i) = child; 
+        i = i +1;
+    end
+    %fprintf("FOV of generation %i", generation);    
+    [FOVmax, idx] = max(fitness);
+    %disp(FOVmax);
+    fprintf(fileID, "FOV of generation %i: %.2f \n", generation,FOVmax);
+    bestFOV(generation) = FOVmax;
+    bestNx = population(:,idx);
+    generation = generation +1;
+    fmt=['Nx (um) =' repmat(' %.2f',1,numel(bestNx))];
+    fprintf(fileID, fmt, bestNx);
+    fprintf(fileID, "\n ############# \n");
+
+end
+a = randi([0 100]);
+fplotsave = fname + "\plots";
+f1 = figure('visible', (figsaveFlag));
+fig_name1 = sprintf("Genetic_Algoithm_N_%i_gen_%i",N,lastgen);
+x = 1:1:lastgen;
+plot(x, bestFOV);
+xlabel("Generations");
+ylabel("FOV (deg)");
+title("Genetic Algorithm");
+if figsaveFlag
+    saveas(f1, fullfile(fplotsave,fig_name1), 'png');
+end
+toc
+
+

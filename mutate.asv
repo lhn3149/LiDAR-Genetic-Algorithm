@@ -1,0 +1,13 @@
+function mutant = mutate(child, mutationRate, wl)
+    i = 1;
+    mutant = child;
+    while (i < length(child)+1)
+        random_number = rand(1);
+        random_number_2 = randi([-3 3]);
+        if (random_number < mutationRate)
+            mutant = mutant + wl*randi([-3 3]);
+        end 
+        i = i + 1;
+    end
+
+end
